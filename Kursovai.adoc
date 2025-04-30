@@ -194,15 +194,33 @@ image::TIM3_CH3.png[]
 
 Полная математическая модель, показывающую, как входное напряжение Vin управляет яркостью светодиода ( L ).
 
-* Измерение напряжения:
+* Измерение напряжения с помощью АЦП
+
+Входное напряжение latexmath:[V_{in}] с потенциометра преобразуется в цифровой код latexmath:[ADC_{code}] через АЦП. Процесс описывается уравнением:
 
 [%center]
 [latexmath]
 ++++
-V_{\text{meas}}[k] = k \times \left\lfloor \frac{V_{\text{in}}(k \cdot dt)}{V_{\text{ref}}} \times 2^n \right\rfloor + \text{offset}
+ADC_{\text{code}} = \left\lfloor \frac{V_{\text{in}}}{V_{\text{ref}}} \times 2^n \right\rfloor
 ++++
 
-* Фильтрация:
+где latexmath:[V_{\text{ref}}=3.3 В] - опорное напряжение АЦП,; +
+latexmath:[n=12] - разрядность АЦП (максимальное значение latexmath:[2^{12}=4096]).
+
+Затем цифровой код преобразуется обратно в измеренное напряжениеlatexmath:[V_{meas}] с учетом калибровочных параметров:
+
+[%center]
+[latexmath]
+++++
+V_{\text{meas}} = k \cdot ADC_{\text{code}} + \text{offset}
+++++
+
+где latexmath:[k= 0.000806 В/единиц] и latexmath:[offset = 0.000806 В] - коэффициенты, обеспечивающие точность измерений.
+
+
+* Фильтрация данных:
+
+Для сглаживания измеренного напряжения используется экспоненциальный фильтр нижних частот. В дискретной форме фильтр выражается разностным уравнением:
 
 [%center]
 [latexmath]
@@ -210,7 +228,15 @@ V_{\text{meas}}[k] = k \times \left\lfloor \frac{V_{\text{in}}(k \cdot dt)}{V_{\
 V_{\text{filtered}}[k] = V_{\text{filtered}}[k-1] + \tau \cdot \left( V_{\text{meas}}[k] - V_{\text{filtered}}[k-1] \right)
 ++++
 
+где latexmath:[V_{\text{filtered}}[k]] - отфильтрованное напряжение на шаге ( k ); +
+latexmath:[V_{\text{meas}}[k]] - измеренное напряжение на шаге ( k ); +
+latexmath:[\tau = 1-e^{- dt/rc}] - коэффициент сглаживания; +
+latexmath:[dt = 0.1с] - шаг дискретизации; +
+latexmath:[rc = 10.0с] - постоянная времени фильтра.
+
 * Управление ШИМ:
+
+Отфильтрованное напряжение latexmath:[V_{filtered}] используется для вычисления коэффициента заполнения ( kz ), который определяет длительность импульса ШИМ:
 
 [%center]
 [latexmath]
@@ -218,21 +244,26 @@ V_{\text{filtered}}[k] = V_{\text{filtered}}[k-1] + \tau \cdot \left( V_{\text{m
 kz[k] = \frac{V_{\text{filtered}}[k]}{V_{\text{max}}}
 ++++
 
+где latexmath:[V_{max}= 3.3B] - максимальное напряжение, соответствующее полной яркости. Значение ( kz ) (в диапазоне от 0 до 1) затем преобразуется в значение регистра сравнения ШИМ (CCR):
+
 [%center]
 [latexmath]
 ++++
 \text{CCR}[k] = kz[k] \cdot \text{ARR}
 ++++
+где latexmath:[ARR = 2000]- период ШИМ в единицах регистра.
 
-* Выходная яркость:
+* Яркость светодиода:
+
+Яркость светодиода ( L ) пропорциональна коэффициенту заполнения ( kz ). Предполагая линейную зависимость, получаем:
 
 [%center]
 [latexmath]
 ++++
-L[k] = L_{\text{max}} \times \frac{V_{\text{filtered}}[k]}{V_{\text{max}}}
+L[k] = L_{\text{max}} \cdot kz[k] = L_{\text{max}} \cdot \frac{V_{\text{filtered}}[k]}{V_{\text{max}}}
 ++++
 
-Это позволяет пропорционально изменять яркость светодиода в зависимости от входного напряжения
+где latexmath:[L_{max}] - максимальная яркость светодиода при latexmath:[kz = 1]
 
 ==== Режимы работы таймера TIM3
 
