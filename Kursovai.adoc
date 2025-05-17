@@ -241,13 +241,13 @@ latexmath:[rc = 10.0с] - постоянная времени фильтра.
 [%center]
 [latexmath]
 ++++
-V_{\text{filtered}}[k] = \sqrt{\frac{1}{T} \int_{0}^{kz[k] \cdot T} V_{\text{max}}^2 \, dt}= 1.650 В
+V_{\text{filtered}}[k] = \sqrt{\frac{1}{T} \int_{0}^{kz[k] \cdot T} V_{\text{max}}^2 \, dt}=  V_{\text{max}} \cdot ( \sqrt{ kz[k]})
 ++++
 
 [%center]
 [latexmath]
 ++++
-kz[k] = \left( \frac{V_{\text{filtered}}[k]}{V_{\text{max}}} \right)^2=0.25
+kz[k] = \left( \frac{V_{\text{filtered}}[k]}{V_{\text{max}}} \right)^2
 
 
 ++++
@@ -654,7 +654,16 @@ Error = \left|\frac{V_{r} - V_{d}}{V_{d}}\right| \cdot 100 \%
 
 .Общая архитектура проекта
 image::obschie.jpg[]
+.архитектура Bluetooth
+image::Bluetooth.jpg[]
 
+.архитектура Filter
+image::Filter.jpg[]
+
+.архитектура Parametr
+image::Parametr.jpg[]
+.архитектура PWM
+image::PWM.jpg[]
 
 
 
