@@ -1,11 +1,13 @@
 #include "bluetoothtask.h" // for BluetoothTask
 
+
 void BluetoothTask::Execute()
 {
   for(;;)
   {
-    mTransmitDataUsart.WriteData(filtredValue);
-    Sleep(1000ms);
+   const char* message = mFormatter.FormatString(filtredValue, 2, " V ");
+    mTransmitDataUsart.WriteData(message);
+    Sleep(100ms);
   }
 }
 

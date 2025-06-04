@@ -11,9 +11,9 @@ public:
     
   }
   
-  void WriteData(std::float_t value)
+  void WriteData(const char* message)
   {
-    mUsart2.WriteData(value);
+    mUsart2.WriteData(message);
   }
 private:
   Usart2Data& mUsart2;

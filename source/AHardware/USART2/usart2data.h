@@ -8,26 +8,37 @@
 class Usart2Data
 {
 public:
-  void WriteData(std::float_t value)
+  void WriteData(const char* message)
   {
-    sReceivedValue = {"Voltage: " + ToStringWithPrecision(value) + " V" +"\n"};
-    while(i < sReceivedValue.length())
+    if (mBufferLength != 0)
+    {
+        return;
+    }
+
+    std::size_t len = std::strlen(message);
+    if (len >= mBufferCapacity)
+    {
+        len = mBufferCapacity - 1;
+    }
+    std::memcpy(mBuffer, message, len);
+    mBuffer[len] = '\0';
+
+    mBufferLength = len;
+ 
+
+    while(mIndex < mBufferLength)
     {
       while(!USART2::SR::TXE::DataRegisterEmpty::IsSet()) {}
-      USART2::DR::Write(sReceivedValue[i++]);
+      USART2::DR::Write(mBuffer[mIndex++]);
     }
-    i = 0;
+    mBufferLength = 0;
+       mIndex = 0;
   }
 private:
-  std::string sReceivedValue;
-  std::size_t i = 0;
-  std::string ToStringWithPrecision(const std::float_t a_value, const int n = 2)
-  {
-   std::ostringstream out;
-   out.precision(n);
-   out << std::fixed << a_value;
-   return std::move(out).str();
-  }
+  static constexpr std::size_t mBufferCapacity = 128;
+  char mBuffer[mBufferCapacity];
+  std::size_t mBufferLength;
+  std::size_t mIndex;
 };
 
 #endif

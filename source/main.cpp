@@ -20,6 +20,7 @@
 #include "luminance.h"   // for Luminance
 #include "measurementadccode.h"   // for MeasurementADCCode
 #include "pwm.h"   // for PWM
+#include "Formatter.h"
 
 std::uint32_t SystemCoreClock = 16'000'000U;
 
@@ -110,7 +111,8 @@ Usart2Data usart2Data;
 TransmitDataUsart transmitDataUsart(usart2Data);
 Filter<dt, rc> filter;
 Luminance<maxVoltageValue> lumin(pwm);
-BluetoothTask bluetoothTask(transmitDataUsart);
+Formatter formatter;
+BluetoothTask bluetoothTask(transmitDataUsart, formatter);
 MeasurementTask measurementTask(filter, voltage, lumin, bluetoothTask);
 
 
