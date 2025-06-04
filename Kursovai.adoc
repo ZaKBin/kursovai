@@ -241,13 +241,13 @@ latexmath:[rc = 10.0с] - постоянная времени фильтра.
 [%center]
 [latexmath]
 ++++
-V_{\text{filtered}}[k] = \sqrt{\frac{1}{T} \int_{0}^{kz[k] \cdot T} V_{\text{max}}^2 \, dt}= 1.650 В
+V_{\text{filtered}}[k] = \sqrt{\frac{1}{T} \int_{0}^{kz[k] \cdot T} V_{\text{max}}^2 \, dt}=  V_{\text{max}} \cdot ( \sqrt{ kz[k]})
 ++++
 
 [%center]
 [latexmath]
 ++++
-kz[k] = \left( \frac{V_{\text{filtered}}[k]}{V_{\text{max}}} \right)^2=0.25
+kz[k] = \left( \frac{V_{\text{filtered}}[k]}{V_{\text{max}}} \right)^2
 
 
 ++++
@@ -655,23 +655,756 @@ Error = \left|\frac{V_{r} - V_{d}}{V_{d}}\right| \cdot 100 \%
 .Общая архитектура проекта
 image::obschie.jpg[]
 
+Общий порядок работы на диаграмме:
+
+. Запуск: MeasurementTask через Execute(): void инициирует процесс;
+. Измерение: IParameter выполняет измерение через Measure ();
+. Фильтрация: IFilter фильтрирует данные, передаёт результат в IFilterNotifier и ILumin;
+. Обработка: ILumin рассчитывает параметры освещённости;
+. Форматирование: Usart2Data преобразует данные в строку;
+. Передача: BluetoothTask отправляет данные по Usart.
+
+.архитектура Bluetooth
+image::Bluetooth.png[]
+
+На данной диаграмме показаны такие классы и срефейсы как:
+
+BluetoothTask - Это базовый класс, от которого наследуются другие классы (IFilterNotifier, TransmitDataUsart);
+
+IFilterNotifier (наследуется от BluetoothTask) - Этот класс отвечает за уведомление о фильтрованных значениях;
+
+TransmitDataUsart (наследуется от BluetoothTask) - Этот класс отвечает за передачу данных через интерфейс USART;
+
+Usart2Data - Этот класс представляет структуру данных для работы с USART, включая буфер для хранения данных;
+
+IFormatter - Интерфейс или абстрактный класс для форматирования данных.
+
+Formatter - Этот класс реализует форматирование данных, унаследовав интерфейс IFormatter.
+
+.архитектура Filter
+image::Filter.jpg[]
+
+На данной диаграмме показаны такие классы и срефейсы как:
+
+IFilter - Это абстрактный интерфейс, который определяет общий контракт для всех фильтров. Содержит: Метод FilterValue(value: float): float:
+
+* Это публичный метод, который должен реализовать любой класс, наследующий IFilter;
+* Принимать входное значение (value) и возвращать отфильтрованное значение;
+
+Filter - Это конкретная реализация интерфейса IFilter, которая реализует фильтрацию значения.  Содержит:
+
+. oldValue: float: 
+
+* Сохраняет предыдущее отфильтрованное значение;
+* Нужен для фильтрации текущего значения на основе прошлого.
+
+. tau: float:
+
+* Это временная постоянная фильтра;
+* Отвечает за степень сглаживания.
+
+. Метод FilterValue(value: float): float:
+
+* Переопределяет метод из интерфейса IFilter;
+* Реализует алгоритм фильтрации (внутри него происходит использование oldValue и tau).
+
+.архитектура Parametr
+image::Parametr.jpg[]
+
+На данной диаграмме показаны такие классы и срефейсы как:
+
+IParametr - Это абстрактный интерфейс, который определяет универсальный способ измерения параметра( в моём случаи напряжение).
+Метод:
+
+* Measure(): float - возвращает измеренное значение параметра в виде числа с плавающей точкой (float).
+
+Voltage - Класс, представляющий измерение напряжения. Он реализует интерфейс IParametr. Свойства класса:
+
+* mADC: IIntDataProvider& - ссылка на источник данных АЦП. Через этот интерфейс Voltage получает "сырой" цифровой код.
+
+Методы класса:
+
+* Voltage(adc: IIntDataProvider&) - конструктор. Получает ссылку на объект, который предоставляет код с АЦП;
+* Measure(): float - реализует преобразование цифрового значения АЦП в аналоговое значение напряжения.
+
+IIntDataProvider - Интерфейс, который предоставляет цифровой код от АЦП. Метод класса:
+
+* ReadChannelData(): uint16_t - возвращает 16-битное целое число, представляющее результат измерения АЦП.
+
+MeasurementADCCode - Класс, реализующий получение кода АЦП.Метод класса:
+
+* ReadChannelData(): uint16_t - реализует получение данных, из АЦП.
+
+.архитектура PWM
+image::PWM.png[]
+
+На данной диаграмме показаны такие классы и срефейсы как:
+
+ILumin - интерфейс, реализуемый объектами, которые реагируют на изменения яркости. Метод класса:
+
+* Update(filteredValue: float): void — метод, который вызывается при получении нового отфильтрованного значения яркости.
+
+Luminance - Реализует интерфейс ILumin, рассчитывает яркость на основе отфильтрованного значения и передаёт коэффициент заполнения (duty cycle) в PWM-контроллер. Свойство класса:
+
+* mPwm: IPWM& — ссылка на объект, управляющий ШИМ.
+
+Методы:
+
+* Luminance(pwm: IPWM&) — конструктор, принимающий ссылку на ШИМ-управляющий объект.
+* Update(filteredValue: float): void — метод, вызываемый при обновлении яркости. Передаёт значение яркости объекту IPWM.
+
+IPWM - абстракция для управления ШИМ. Метод:
+
+* Set(kz: float): void — устанавливает коэффициент заполнения ШИМ (от 0.0 до 1.0).
+
+PWM - Реализует интерфейс IPWM. Метод:
+
+* Set(kz: float): void — устанавливает значение в регистр CCR (Capture/Compare Register) микроконтроллера, тем самым управляя шириной импульса.
+
+== Классы
+
+=== .main.cpp
+
+[source,cpp,linenums]
+----
+#include "rtos.hpp" // for Rtos
+#include "mailbox.hpp" // for Mailbox
+#include "event.hpp" // for Event
+#include "rccregisters.hpp" // for RCC
+#include "Application/Diagnostic/GlobalStatus.hpp"
+#include "gpioaregisters.hpp" // for GPIOA
+#include "gpiocregisters.hpp" // for GPIOC
+#include "adc1registers.hpp" // for ADC1
+#include "adccommonregisters.hpp" // for ADC
+#include "tim3fieldvalues.hpp" // for TIM3 values
+#include "tim3registers.hpp" // for TIM3 registers
+#include "usart2fieldvalues.hpp" // for USART2
+#include "usart2registers.hpp" // for USART2
+#include "usart2data.h" // for usart2data
+#include "transmitdatausart.h" // for TransmitDataUsart
+#include "measurementtask.h"   // for MeasurementTask 
+#include "bluetoothtask.h"  // for BluetoothTask
+#include "voltage.h"  // for Voltage
+#include "filter.h"   // for Filter
+#include "luminance.h"   // for Luminance
+#include "measurementadccode.h"   // for MeasurementADCCode
+#include "pwm.h"   // for PWM
+#include "Formatter.h"
+
+std::uint32_t SystemCoreClock = 16'000'000U;
+
+extern "C" {
+int __low_level_init(void)
+{
+//Switch on external 16 MHz oscillator
+  RCC::CR::HSION::On::Set();
+  // while (RCC::CR::HSIRDY::NotReady::IsSet())
+  {
+
+  }
+  //Switch system clock on external oscillator
+  RCC::CFGR::SW::Hsi::Set();
+  // while (!RCC::CFGR::SWS::Hsi::IsSet())
+  {
+
+  }
+  RCC::APB2ENR::SYSCFGEN::Enable::Set();
+  RCC::APB1ENR::TIM3EN::Enable::Set();
+  RCC::AHB1ENR::GPIOCEN::Enable::Set();
+  RCC::APB2ENR::ADC1EN::Enable::Set();
+  RCC::AHB1ENR::GPIOAEN::Enable::Set();
+  RCC::APB1ENR::USART2EN::Enable::Set();
+
+  GPIOC::MODER::MODER8::Alternate::Set();
+  GPIOC::AFRH::AFRH8::Af2::Set();
+  GPIOC::PUPDR::PUPDR8::NoPullUpNoPullDown::Set(); 
+  GPIOC::OSPEEDR::OSPEEDR8::HighSpeed::Set();
+  
+  TIM3::CCMR2_Output::CC3S::Value0::Set();
+  TIM3::CCMR2_Output::OC3M::Value6::Set();
+  TIM3::CCMR2_Output::OC3PE::Value1::Set();
+  TIM3::CR1::ARPE::Value1::Set();
+  TIM3::ARR::ARR_H::Set(0U);
+  TIM3::ARR::ARR_L::Set(2000U);
+  TIM3::CCR3::CCR3_H::Set(0U);
+  TIM3::CCR3::CCR3_L::Set(0U);
+  TIM3::CCER::CC3P::Value0::Set();
+  TIM3::CCER::CC3NP::Value0::Set();
+  TIM3::CCER::CC3E::Value1::Set();
+  TIM3::CR1::CEN::Value1::Set();
+  
+  ADC1::CR1::RES::Bits12::Set();
+  ADC1::CR2::CONT::SingleConversion::Set();
+  ADC1::CR2::EOCS::SingleConversion::Set();
+  ADC1::SQR1::L::Conversions1::Set();
+  ADC1::SQR3::SQ1::Channel0::Set();
+  ADC1::SMPR2::SMP0::Cycles84::Set();
+  GPIOA::MODER::MODER0::Analog::Set();
+  ADC1::CR2::ADON::Enable::Set();
+  
+  GPIOA::MODER::MODER2::Alternate::Set(); 
+  GPIOA::MODER::MODER3::Alternate::Set(); 
+  GPIOA::OTYPER::OT2::OutputPushPull::Set();
+  GPIOA::OTYPER::OT3::OutputPushPull::Set();
+  GPIOA::PUPDR::PUPDR2::PullUp::Set(); 
+  GPIOA::PUPDR::PUPDR3::PullUp::Set(); 
+  
+  GPIOA::AFRL::AFRL2::Af7::Set();
+  GPIOA::AFRL::AFRL3::Af7::Set();
+  
+  USART2::BRR::DIV_Mantissa::Set(104);
+  USART2::BRR::DIV_Fraction::Value2::Set();
+  USART2::CR2::STOP::Value0::Set();
+    
+  USART2::CR1::OVER8::OversamplingBy16::Set(); 
+  USART2::CR1::M::Data8bits::Set();
+  
+  USART2::CR1::TE::Enable::Set();
+  USART2::CR1::UE::Enable::Set();
+  USART2::SR::TC::TransmitionNotComplete::Set();
+  
+  return 1;
+}
+}
+
+constexpr std::float_t dt = 0.1f ;
+constexpr std::float_t rc = 10.0f;
+constexpr std::float_t maxVoltageValue = 3.3f ;
+constexpr std::float_t k = 0.000806f ;
+constexpr std::float_t offset = 0.000806f ;
+
+MeasurementADCCode mADCCode;
+Pwm pwm;
+Voltage<k, offset> voltage(mADCCode);
+Usart2Data usart2Data;
+TransmitDataUsart transmitDataUsart(usart2Data);
+Filter<dt, rc> filter;
+Luminance<maxVoltageValue> lumin(pwm);
+Formatter formatter;
+BluetoothTask bluetoothTask(transmitDataUsart, formatter);
+MeasurementTask measurementTask(filter, voltage, lumin, bluetoothTask);
 
 
+int main()
+{
+  using namespace OsWrapper;
+  Rtos::CreateThread(measurementTask, "MeasurementTask", ThreadPriority::priorityMax);
+  Rtos::CreateThread(bluetoothTask, "BluetoothTask", ThreadPriority::lowest);
+  Rtos::Start();
+  return 0;
+}
+----
+
+=== .measurementadccode.h
+
+[source,cpp,linenums]
+----
+#ifndef MEASUREMENTADCCODE
+#define MEASUREMENTADCCODE
+
+#include <iintdataprovider.h> // for ADC
+
+class MeasurementADCCode : public IIntDataProvider
+{
+public:
+  std::uint16_t ReadData() const override
+  {
+    ADC1::CR2::SWSTART::On::Set();
+    while(!ADC1::SR::EOC::ConversionComplete::IsSet())
+    {
+      
+    }
+    return static_cast<std::uint16_t>(ADC1::DR::DATA::Get());
+  }
+};
+
+#endif
+----
+
+=== .iintdataprovider.h
+
+[source,cpp,linenums]
+----
+#ifndef IINTDATAPROVIDER
+#define IINTDATAPROVIDER
+
+class IIntDataProvider
+{
+public:
+  virtual std::uint16_t ReadData() const = 0;
+};
+
+#endif
+----
+
+=== .voltage.h
+
+[source,cpp,linenums]
+----
+#ifndef VOLTAGE
+#define VOLTAGE
+
+#include <iparametr.h> //for IParametr
+#include <iintdataprovider.h> //for IIntDataProvider
+
+template<const float& k, const float& offset>
+class Voltage : public IParametr
+{
+public:
+  Voltage(IIntDataProvider& adc) : mADC(adc)
+  {
+    
+  }
+  
+  float Measure() override
+  {
+    return (k*(static_cast<float>(mADC.ReadData())) + offset);
+  }
+private:
+  IIntDataProvider& mADC;
+};
+
+#endif
+----
+
+=== .iparametr.h
+
+[source,cpp,linenums]
+----
+#ifndef IPARAMETR
+#define IPARAMETR
+
+class IParametr
+{
+public:
+  virtual float Measure() = 0;
+};
+
+#endif
+----
+
+=== .filrer.h
+
+[source,cpp,linenums]
+----
+#ifndef FILTER
+#define FILTER
+
+#include "ifilter.h" // for IFilter
+
+template<const std::float_t& dt, const std::float_t& rc>
+class Filter : public IFilter
+{
+public:
+  std::float_t FilterValue(std::float_t value) override
+  {
+    static bool isFirstTime = true;
+    if(isFirstTime)
+    {
+      oldValue = value;
+      return value;
+    }
+    auto filteredValue = oldValue + (value - oldValue) * tau;
+    oldValue = filteredValue;
+    return filteredValue;
+  }
+private:
+  std::float_t oldValue;
+  const std::float_t tau = 1.0f - exp(-dt/rc);
+  };
+
+#endif
+----
+
+=== .ifilrer.h
+
+[source,cpp,linenums]
+----
+#ifndef IFILTER
+#define IFILTER
+
+class IFilter
+{
+public:
+  
+  virtual std::float_t FilterValue(std::float_t value) = 0;
+};
+
+#endif
+----
+
+=== .pwm.h
+
+[source,cpp,linenums]
+----
+#ifndef PWM
+#define PWM
+
+#include <ipwm.h> // for IPWM
+#include "tim3fieldvalues.hpp" // for TIM3 values
+#include "tim3registers.hpp" // for TIM3 registers
+
+class Pwm : public IPwm
+{
+public:
+  void SetValue(std::float_t kz) override
+  {
+    auto valueCCR = static_cast<std::float_t>(TIM3::ARR::ARR_L::Get()) * kz;
+    TIM3::CCR3::CCR3_L::Set(static_cast<uint16_t>(valueCCR));
+  }
+};
+
+#endif
+----
+
+=== .ipwm.h
+
+[source,cpp,linenums]
+----
+#ifndef IPWM
+#define IPWM
+
+class IPwm
+{
+public:
+  virtual void SetValue(float kz) = 0;
+};
+
+#endif
+----
+
+=== .luminance.h
+
+[source,cpp,linenums]
+----
+#ifndef LUMINANCE
+#define LUMINANCE
+
+#include <iluminance.h> // for Iluminance
+#include <ipwm.h> // for IPwm
+
+template<const float& maxVoltageValue>
+class Luminance : public ILuminance
+{
+public:
+  Luminance(IPwm& pwm) : mPwm(pwm)
+  {
+    
+  }
+  
+  void Update(std::float_t filtredValue) override
+  {
+    std::float_t kz = filtredValue/maxVoltageValue;
+    mPwm.SetValue(kz);
+  }
+private:
+  IPwm& mPwm;
+};
+
+#endif
+----
+
+=== .iluminance.h
+
+[source,cpp,linenums]
+----
+#ifndef ILUMINANCE
+#define ILUMINANCE
+
+class ILuminance
+{
+public:
+  virtual void Update(std::float_t filtredValue) = 0;
+};
+
+#endif
+----
+
+=== .measurementtask.h
+
+[source,cpp,linenums]
+----
+#ifndef MEASUREMENTTASK
+#define MEASUREMENTTASK
+
+#include "thread.hpp" //For OsWrapper::Thread
+#include "ifilter.h" // for IFilter
+#include "iparametr.h" // for IParametr
+#include "iluminance.h" // for ILuminance
+#include "ifilternotifier.h" // for IFilterNotifier
+
+using namespace OsWrapper;
+
+class MeasurementTask : public OsWrapper::Thread<512U>
+{
+public:
+  MeasurementTask(IFilter& filteredValue, IParametr& measuredValue, ILuminance& luminance, IFilterNotifier& filterNotifier) : 
+    mFilteredValue(filteredValue), mMeasuredValue(measuredValue), mLuminance(luminance), mFilterNotifier(filterNotifier)
+  {
+    
+  }
+  
+  virtual void Execute() override;
+private:
+  IFilter& mFilteredValue;
+  IParametr& mMeasuredValue;
+  ILuminance& mLuminance;
+  IFilterNotifier& mFilterNotifier;
+};
+
+#endif
+----
+
+=== .measurementtask.cpp
+
+[source,cpp,linenums]
+----
+#include "measurementtask.h" // for MeasurementTask
+#include "tim3fieldvalues.hpp" // for TIM3 values
+#include "tim3registers.hpp" // for TIM3 registers
+
+void MeasurementTask::Execute()
+{
+  for(;;)
+  {
+    Sleep(50ms);
+    auto measurementVariable1 = mMeasuredValue.Measure();
+    Sleep(50ms);
+    auto measurementVariable2 = mMeasuredValue.Measure();
+    auto measurementVariableSum = (measurementVariable1 + measurementVariable2)/2.0f;
+    auto filteredVoltage = mFilteredValue.FilterValue(measurementVariableSum);
+    mLuminance.CalculateLumin(filteredVoltage);
+    mFilterNotifier.FilteredValueUpdate(filteredVoltage);
+  }
+} ;
+----
+
+=== .ifilternotifier.h
+
+[source,cpp,linenums]
+----
+#ifndef IFILTERNOTIFIER
+#define IFILTERNOTIFIER
+
+class IFilterNotifier
+{
+public:
+  
+  virtual std::float_t FilteredValueUpdate(std::float_t value) = 0;
+};
+
+#endif
+----
+
+=== .usart2data.h
+
+[source,cpp,linenums]
+----
+#ifndef USART2DATA
+#define USART2DATA
+
+#include "usart2fieldvalues.hpp" // for USART2
+#include "usart2registers.hpp" // for USART2
+#include <sstream>
+
+class Usart2Data
+{
+public:
+  void WriteData(const char* message)
+  {
+    if (mBufferLength != 0)
+    {
+        return;
+    }
+
+    std::size_t len = std::strlen(message);
+    if (len >= mBufferCapacity)
+    {
+        len = mBufferCapacity - 1;
+    }
+    std::memcpy(mBuffer, message, len);
+    mBuffer[len] = '\0';
+
+    mBufferLength = len;
+ 
+
+    while(mIndex < mBufferLength)
+    {
+      while(!USART2::SR::TXE::DataRegisterEmpty::IsSet()) {}
+      USART2::DR::Write(mBuffer[mIndex++]);
+    }
+    mBufferLength = 0;
+       mIndex = 0;
+  }
+private:
+  static constexpr std::size_t mBufferCapacity = 128;
+  char mBuffer[mBufferCapacity];
+  std::size_t mBufferLength;
+  std::size_t mIndex;
+};
+
+#endif
+----
+
+=== .transmitdatausart.h
+
+[source,cpp,linenums]
+----
+#ifndef TRANSMITDATAUSART
+#define TRANSMITDATAUSART
+
+#include "usart2data.h" // for USART2
+
+class TransmitDataUsart
+{
+public:
+  TransmitDataUsart(Usart2Data& usart2) : mUsart2(usart2)
+  {
+    
+  }
+  
+  void WriteData(const char* message)
+  {
+    mUsart2.WriteData(message);
+  }
+private:
+  Usart2Data& mUsart2;
+};
+
+#endif;
+
+----
+
+=== .iformatter.h
+
+[source,cpp,linenums]
+----
+#ifndef IFORMATTER_HPP
+#define IFORMATTER_HPP
+#include <cstdint> // for std::uint8_t
+#include <cmath>
+
+class IFormatter
+{
+public:
+  virtual char* FormatString(std::float_t value, const uint8_t precision, const char* unit) = 0;
+};
+
+#endif
+----
+
+=== .formatter.h
+
+[source,cpp,linenums]
+----
+#ifndef FORMATTER_HPP
+#define FORMATTER_HPP
+
+#include "IFormatter.h" // for IFormatter
+
+class Formatter : public IFormatter
+{
+public:
+  Formatter();
+  char* FormatString(std::float_t value, const uint8_t precision, const char* unit) override;
+private:
+  char mBuffer[250];
+  const char* mPrefix;
+};
+
+#endif
+----
+
+=== .formatter.cpp
+
+[source,cpp,linenums]
+----
+#include "Formatter.h" // for Formatter
+#include <string> // for std::snprintf
+
+Formatter :: Formatter() : mPrefix(nullptr)
+{}
+
+char* Formatter :: FormatString(std::float_t value, const uint8_t precision, const char* unit)
+{
+  mPrefix = "Voltage: ";
+  
+  std::snprintf(mBuffer, sizeof(mBuffer), "%s%.*f%s\r", mPrefix, precision, static_cast<double>(value), unit);
+      
+  return mBuffer;
+}
+----
+=== .bluetoothtask.h
+
+[source,cpp,linenums]
+----
+#ifndef BLUETOOTHTASK
+#define BLUETOOTHTASK
+
+#include "thread.hpp" //For OsWrapper::Thread
+#include "transmitdatausart.h" // for TransmitDataUsart
+#include "ifilternotifier.h" // for IFilterNotifier
+#include "IFormatter.h"
+
+using namespace OsWrapper;
+
+class BluetoothTask : public OsWrapper::Thread<512U>, public IFilterNotifier
+{
+public:
+  BluetoothTask(TransmitDataUsart& transmitDataUsart, IFormatter& formatter) : 
+    mTransmitDataUsart(transmitDataUsart), mFormatter(formatter)
+  {
+    
+  }
+  
+  virtual void Execute() override;
+  virtual void FilteredValueUpdate(std::float_t value) override;
+private:
+  IFormatter& mFormatter;
+  TransmitDataUsart& mTransmitDataUsart;
+  std::float_t filtredValue;
+};
+
+#endif
+----
+
+=== .bluetoothtask.cpp
+
+[source,cpp,linenums]
+----
+#include "bluetoothtask.h" // for BluetoothTask
 
 
+void BluetoothTask::Execute()
+{
+  for(;;)
+  {
+   const char* message = mFormatter.FormatString(filtredValue, 2, " V ");
+    mTransmitDataUsart.WriteData(message);
+    Sleep(100ms);
+  }
+}
 
+void BluetoothTask::FilteredValueUpdate(std::float_t value)
+{
+  filtredValue = value;
+}
+----
 
+== Результат работы программы
 
+На рисунке снизу показан вывод напряжения.
 
+.Передача данных по напряжению
 
+image::Terminal.png[]
 
+На видео снизу показано управления яркостью при помощи потенциометра.
 
+.Управление яркостью светодиода
 
+video::video_2025-05-31_19-41-36.mp4[]
 
+== Заключение
 
-
-
-
-
-
-
+В ходе работы над курсовым проектом было разработано программное обеспечение для устройства управления яркостью за счет напряжения с потенциометра, полученное через АЦП. Передача результатов измерения напряжения выполняется по протоколу Usart. 
